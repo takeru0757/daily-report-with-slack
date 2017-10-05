@@ -1,0 +1,44 @@
+#!/usr/bin/env ruby
+
+require 'dotenv/load'
+require 'slack-ruby-client'
+
+SLACK_API_TOKEN = ENV['SLACK_API_TOKEN']
+SLACK_CHANNEL   = ENV['SLACK_CHANNEL']
+SLACK_USER_ID   = ENV['SLACK_USER_ID']
+
+fail "You must specify SLACK_USER_ID" unless SLACK_USER_ID
+
+client = Slack::Web::Client.new(token: SLACK_API_TOKEN)
+now = Time.now
+
+channels_history = client.channels_history({
+  channel: SLACK_CHANNEL,
+  oldest: Time.new(now.year, now.mon, now.day).to_f
+})
+
+user_messages = channels_history.messages.select { |message|
+  message.type == 'message' && message.user == SLACK_USER_ID
+}
+
+unless user_messages.count > 0
+  puts "You didn't do anything."
+  exit
+end
+
+report_body = user_messages.reverse
+  .map { |m| "- #{m.text.gsub(/(\r\n|\r|\n)+/, ' ')}" }
+  .join("\n")
+
+report = <<-EOS
+Daily Report: <@#{SLACK_USER_ID}>
+```
+#{report_body}
+```
+EOS
+
+client.chat_postMessage({
+  channel: SLACK_CHANNEL,
+  text: report,
+  as_user: true
+})
